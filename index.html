@@ -34,7 +34,10 @@ body:after{width:360px;height:360px;background:var(--m);bottom:-170px;left:-130p
   .sidebar.open{transform:translateX(0)}
   .sb-bg.open{display:block;position:fixed;inset:0;z-index:25;background:rgba(62,16,25,.35)}
 }
-@media(min-width:900px){.topbar .backbtn{display:none}}
+.topbar .backbtn{display:none}
+.cat-sel{display:block;width:100%;margin-top:8px}
+#cChips,#pChips{display:none!important}
+@media(min-width:1024px){.cat-sel{display:none!important}#cChips{display:grid!important}#pChips{display:flex!important}}
 .brand{text-align:center;margin-bottom:16px}.brand b{display:block;font-size:20px;color:var(--m)}.brand span{font-size:12px;opacity:.75}
 h1{margin:0 0 4px;font-size:26px}.sub{font-size:13px;opacity:.75;margin:0 0 16px}
 .seg{display:flex;height:44px;border:1.5px solid var(--m);border-radius:12px;overflow:hidden;margin-bottom:16px;background:rgba(255,255,255,.7)}
@@ -235,6 +238,7 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     </div>
     <div class="pos-head">
       <input id="cSearch" placeholder="Cari produk" aria-label="Cari produk">
+      <select id="cCatSel" class="cat-sel" aria-label="Kategori"></select>
       <div class="chips gridc" id="cChips" style="margin:10px 0 0"></div>
     </div>
     <p class="err" id="cMsg" role="alert"></p>
@@ -253,6 +257,7 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
       <div>
         <div class="pos-head">
           <input id="pSearch" placeholder="Cari produk" aria-label="Cari produk">
+          <select id="pCatSel" class="cat-sel" aria-label="Kategori"></select>
           <div class="chips scroll" id="pChips" style="justify-content:flex-start;margin:10px 0 0"></div>
         </div>
         <div class="grid" id="pGrid"></div>
@@ -602,11 +607,14 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     if (C.data.multi) { var a = el('option', '', 'Semua outlet'); a.value = 'ALL'; sel.appendChild(a); }
     C.data.outlets.forEach(function (o) { var x = el('option', '', o.nama); x.value = o.outlet_id; sel.appendChild(x); });
     sel.value = C.outlet;
-    var box = $('cChips'); box.textContent = '';
+    var box = $('cChips'), csel = $('cCatSel'); box.textContent = ''; csel.textContent = '';
     [{ category_id: 'all', nama: 'Semua' }].concat(C.data.catalog.categories).forEach(function (c) {
+      var opt = el('option', '', c.nama === 'Semua' ? 'Semua kategori' : c.nama); opt.value = c.category_id; csel.appendChild(opt);
       var b = el('button', 'chip' + (C.cat === c.category_id ? ' on' : ''), c.nama); b.type = 'button';
       b.onclick = function () { C.cat = c.category_id; buildFilters(); renderGrid(); }; box.appendChild(b);
     });
+    csel.value = C.cat;
+    csel.onchange = function () { C.cat = this.value; buildFilters(); renderGrid(); };
   }
   function renderGrid() {
     var g = $('cGrid'); g.textContent = ''; var q = C.q.trim().toLowerCase(), need = [];
@@ -660,11 +668,14 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
       K.d = d; K.outlet = d.outlet; $('pMsg').textContent = '';
       var sel = $('pOutlet'); sel.textContent = '';
       d.outlets.forEach(function (o) { var x = el('option', '', o.nama); x.value = o.outlet_id; sel.appendChild(x); }); sel.value = K.outlet;
-      var chips = $('pChips'); chips.textContent = '';
+      var chips = $('pChips'), psel = $('pCatSel'); chips.textContent = ''; psel.textContent = '';
       [{ category_id: 'all', nama: 'Semua' }].concat(d.catalog.categories).forEach(function (c) {
+        var opt = el('option', '', c.nama === 'Semua' ? 'Semua kategori' : c.nama); opt.value = c.category_id; psel.appendChild(opt);
         var b = el('button', 'chip' + (K.cat === c.category_id ? ' on' : ''), c.nama); b.type = 'button'; b.setAttribute('data-cat', c.category_id);
-        b.onclick = function () { K.cat = c.category_id; Array.prototype.forEach.call(chips.children, function (x) { x.classList.toggle('on', x === b); }); renderPos(); }; chips.appendChild(b);
+        b.onclick = function () { K.cat = c.category_id; psel.value = K.cat; Array.prototype.forEach.call(chips.children, function (x) { x.classList.toggle('on', x === b); }); renderPos(); }; chips.appendChild(b);
       });
+      psel.value = K.cat;
+      psel.onchange = function () { K.cat = this.value; Array.prototype.forEach.call(chips.children, function (x) { x.classList.toggle('on', x.getAttribute('data-cat') === K.cat); }); renderPos(); };
       var ps = $('cPromo'); ps.textContent = ''; var n0 = el('option', '', 'Tanpa diskon'); n0.value = ''; ps.appendChild(n0);
       d.promos.forEach(function (p) { var o = el('option', '', p.nama + ' (' + (p.jenis === 'persen' ? p.nilai + '%' : rp(p.nilai)) + ')'); o.value = p.promo_id; ps.appendChild(o); });
       var dl = $('memberList'); dl.textContent = '';
