@@ -1733,13 +1733,63 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
       c.appendChild(ac); b.appendChild(c);
     });
   }
+  function compressImg(file) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onerror = function () { rej(new Error('Gagal membaca file foto.')); };
+      fr.onload = function () {
+        var img = new Image();
+        img.onerror = function () { rej(new Error('Format gambar tidak didukung (gunakan JPG/PNG/WebP).')); };
+        img.onload = function () {
+          var trySize = function (maxD, q) {
+            var sc = Math.min(1, maxD / Math.max(img.width, img.height));
+            var w = Math.max(1, Math.round(img.width * sc)), h = Math.max(1, Math.round(img.height * sc));
+            var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(img, 0, 0, w, h);
+            return cv.toDataURL('image/jpeg', q);
+          };
+          var out = trySize(260, 0.72);
+          if (out.length > 45000) out = trySize(200, 0.55);
+          if (out.length > 45000) out = trySize(160, 0.45);
+          res(out);
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
   function openProdForm(p) {
     var cats = MG.d.categories.map(function (c) { return [c.category_id, c.nama]; });
+    var isStored = p && p.foto_url === '[Foto tersimpan]';
+    var fotoState = isStored ? '__KEEP__' : (p ? p.foto_url : '');
     mgModal(p ? 'Ubah produk' : 'Tambah produk', function (b) {
       mgField(b, 'Nama produk', mgInput('mprNama', p ? p.nama : '', 'text'));
       mgField(b, 'Kategori', mgSelect('mprCat', cats, p ? p.category_id : (cats[0] && cats[0][0])));
       mgField(b, 'Mode isi', mgSelect('mprMode', [['campur', 'Boleh dicampur (sesuai pcs)'], ['satu', 'Hanya satu pilihan isi']], p ? p.mode_isi : 'campur'));
-      mgField(b, 'Nama file foto di Drive (opsional)', mgInput('mprFoto', p ? p.foto_url : '', 'text', 'contoh: dimsum-mentai.jpg'));
+      var fWrap = el('div', 'field'); fWrap.appendChild(el('label', '', 'Foto produk (upload langsung)'));
+      var prev = el('div', 'pcPh', 'Belum ada foto'); prev.style.cssText = 'height:120px;margin-bottom:8px';
+      if (p && p.has_foto) {
+        if (PH[p.product_id]) setImg(prev, PH[p.product_id], p.nama);
+        else call('api_photo', S.token, p.product_id).then(function (u) { if (u) { PH[p.product_id] = u; setImg(prev, u, p.nama); } }).catch(function () {});
+      }
+      var fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*'; fi.style.padding = '10px';
+      var fAct = el('div', 'acts'); fAct.style.marginTop = '6px';
+      var fDel = msgBtn('Hapus foto', 's', function () {
+        fotoState = ''; fi.value = ''; if ($('mprFoto')) $('mprFoto').value = '';
+        prev.textContent = 'Belum ada foto';
+      });
+      fi.onchange = function () {
+        if (!fi.files || !fi.files[0]) return;
+        prev.textContent = 'Memproses foto...';
+        compressImg(fi.files[0]).then(function (dataUrl) {
+          fotoState = dataUrl; setImg(prev, dataUrl, 'Preview');
+          if ($('mprFoto')) $('mprFoto').value = '';
+        }).catch(function (e) { prev.textContent = 'Gagal memuat foto'; $('mgOvErr').textContent = msg(e); });
+      };
+      fAct.appendChild(fDel); fWrap.appendChild(prev); fWrap.appendChild(fi); fWrap.appendChild(fAct); b.appendChild(fWrap);
+      var fTxt = mgInput('mprFoto', isStored ? '' : (p ? p.foto_url : ''), 'text', 'Opsional: tempel link Drive');
+      fTxt.addEventListener('input', function () { fotoState = this.value.trim(); });
+      mgField(b, 'Atau link Google Drive (opsional)', fTxt);
       mgField(b, 'Status', mgSelect('mprAktif', [['1', 'Aktif'], ['0', 'Nonaktif']], !p || p.aktif ? '1' : '0'));
       if (!p) {
         mgField(b, 'Harga jual varian awal (Rp)', mgInput('mprJual', '', 'number', 'contoh: 15000'));
@@ -1748,10 +1798,14 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     }, function () {
       var payload = {
         product_id: p ? p.product_id : '', nama: $('mprNama').value, category_id: $('mprCat').value,
-        mode_isi: $('mprMode').value, foto_url: $('mprFoto').value, aktif: $('mprAktif').value === '1'
+        mode_isi: $('mprMode').value, foto_url: fotoState, aktif: $('mprAktif').value === '1'
       };
       if (!p && $('mprJual').value !== '') { payload.harga_jual = $('mprJual').value; payload.harga_beli = $('mprBeli').value; }
-      return call('api_saveProduct', S.token, payload);
+      return call('api_saveProduct', S.token, payload).then(function (pid) {
+        if (fotoState && fotoState.indexOf('data:image/') === 0) PH[pid] = fotoState;
+        else if (fotoState === '') delete PH[pid];
+        else if (fotoState !== '__KEEP__') delete PH[pid];
+      });
     });
   }
   function openVarForm(p, v) {
