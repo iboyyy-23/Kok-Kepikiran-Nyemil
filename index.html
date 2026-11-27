@@ -267,7 +267,7 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
         <div class="seg" id="tipeTabs" style="margin:0"><button type="button" data-t="langsung" class="on">Langsung</button><button type="button" data-t="pesanan">Pesanan</button></div>
         <div id="pesananBox" class="hide">
           <div class="lb" style="margin-bottom:4px">Jadwal ambil / kirim</div><div class="dt"><input id="cTgl" type="date" aria-label="Tanggal"><input id="cJam" type="time" aria-label="Jam"></div>
-          <div class="lb" style="margin-top:8px">No. WhatsApp (opsional)</div><input id="cHp" inputmode="tel" placeholder="08xxxxxxxxxx">
+          <div class="lb" style="margin-top:8px">No. WhatsApp * (wajib untuk pesanan)</div><input id="cHp" inputmode="tel" placeholder="08xxxxxxxxxx">
         </div>
         <div>
           <div class="lb" id="lbCust">Nama pelanggan / member</div>
@@ -361,7 +361,7 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
   </div>
   <div id="vManage" class="hide">
     <div class="topbar"><button class="btn s sm mob-menu" type="button" aria-label="Menu">☰</button><button class="btn s sm backbtn" id="mgBack" type="button">Kasir</button><h1 style="margin:0;flex:1">Manajemen</h1></div>
-    <div class="seg" id="mgTabs"><button type="button" data-t="promo" class="on">Promo</button><button type="button" data-t="produk">Produk &amp; Harga</button><button type="button" data-t="user">Pengguna</button></div>
+    <div class="seg" id="mgTabs"><button type="button" data-t="promo" class="on">Promo</button><button type="button" data-t="produk">Produk &amp; Harga</button><button type="button" data-t="user">Pengguna</button><button type="button" data-t="kurir">Kurir</button><button type="button" data-t="riwayat">Riwayat Harga</button></div>
     <p class="err" id="mgMsg" role="alert"></p>
     <div id="mgBody"></div>
   </div>
@@ -839,6 +839,7 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     nama = mem ? mem.nama : nama.replace(/\s*·.*$/, '');
     if (ps && !nama) { $('cErr').textContent = 'Isi nama pelanggan untuk pesanan.'; return; }
     if (ps && !$('cTgl').value) { $('cErr').textContent = 'Isi tanggal ambil atau kirim.'; return; }
+    if (ps && !String($('cHp').value || '').trim()) { $('cErr').textContent = 'Isi nomor WhatsApp pelanggan untuk pesanan.'; return; }
     if (K.busy) return; K.busy = true; var btn = this; busy(btn, true);
     var payload = {
       client_id: K.cid, outlet_id: K.outlet, tipe: K.tipe, metode: K.metode, nama_pelanggan: nama, member_id: mem ? mem.member_id : '',
@@ -1103,9 +1104,18 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
       var ac = el('div', 'acts');
       var b1 = el('button', 'btn s', 'Kirim struk'); b1.type = 'button'; b1.onclick = function () { orderReceipt(o, d.toko); };
       var b2 = el('button', 'btn', 'Bayar'); b2.type = 'button'; b2.onclick = function () { openPayOrder(o); };
-      ac.appendChild(b1); ac.appendChild(b2);
+      var bEdit = el('button', 'btn s', 'Ubah jadwal'); bEdit.type = 'button'; bEdit.onclick = function () { editOrderSched(o); };
+      ac.appendChild(b1); ac.appendChild(b2); ac.appendChild(bEdit);
       if (d.role !== 'kasir') { var b3 = el('button', 'btn s', 'Batalkan'); b3.type = 'button'; b3.onclick = function () { cancelOrder(o); }; ac.appendChild(b3); }
       c.appendChild(ac); list.appendChild(c);
+    });
+  }
+  function editOrderSched(o) {
+    mgModal('Ubah jadwal · ' + o.nama_pelanggan, function (b) {
+      mgField(b, 'Tanggal ambil / kirim', mgInput('eoTgl', o.jadwal_tanggal || todayStr(), 'date'));
+      mgField(b, 'Jam ambil / kirim', mgInput('eoJam', o.jadwal_jam || '', 'time'));
+    }, function () {
+      return call('api_updateOrderSchedule', S.token, { sale_id: o.sale_id, jadwal_tanggal: $('eoTgl').value, jadwal_jam: $('eoJam').value }).then(loadOrders);
     });
   }
   function cancelOrder(o) {
@@ -1156,6 +1166,10 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     items.forEach(function (t) { var b = el('button', SK.tab === t.id ? 'on' : '', t.nama); b.type = 'button'; b.onclick = function () { SK.tab = t.id; drawStock(); }; tabs.appendChild(b); });
     var ch = $('sChips'); ch.textContent = '';
     [['all', 'Semua'], ['menipis', 'Menipis'], ['habis', 'Habis']].forEach(function (f) { var b = el('button', 'chip' + (SK.f === f[0] ? ' on' : ''), f[1]); b.type = 'button'; b.onclick = function () { SK.f = f[0]; drawStock(); }; ch.appendChild(b); });
+    if (d.role === 'owner' || d.role === 'admin') {
+      ch.appendChild(msgBtn('+ Catat stok', '', openStockMove));
+      ch.appendChild(msgBtn('Rekap stok masuk', 's', openStockRecap));
+    }
     var all = SK.tab === 'ALL', narrow = window.innerWidth < 600;
     var cols = all ? (narrow ? 'minmax(0,1fr) 46px 54px 54px 76px' : 'minmax(0,1fr) 90px 90px 90px 110px') : (narrow ? 'minmax(0,1fr) 72px 84px' : 'minmax(0,1fr) 120px 120px');
     var head = $('sHead'); head.textContent = ''; head.style.gridTemplateColumns = cols;
@@ -1179,6 +1193,39 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
   $('sSearch').addEventListener('input', function () { SK.q = this.value; if (SK.d) drawStock(); });
   window.addEventListener('resize', function () { if (SK.d && !$('vStock').classList.contains('hide')) drawStock(); });
   $('sBack').onclick = home;
+  function openStockMove() {
+    var d = SK.d; if (!d || !d.all_items.length) return;
+    var items = d.all_items.map(function (i) { return [i.stock_item_id, i.kategori + ' · ' + i.nama + ' (' + i.satuan + ')']; });
+    var outs = d.outlets.map(function (o) { return [o.outlet_id, o.nama]; });
+    mgModal('Catat pergerakan stok', function (b) {
+      mgField(b, 'Outlet', mgSelect('smOut', outs, outs[0][0]));
+      mgField(b, 'Jenis', mgSelect('smJns', [['masuk', 'Stok masuk / pembelian'], ['keluar', 'Stok keluar'], ['rusak', 'Rusak / terbuang'], ['opname', 'Penyesuaian (opname)']], 'masuk'));
+      mgField(b, 'Barang (termasuk kemasan & topping)', mgSelect('smItem', items, items[0][0]));
+      mgField(b, 'Jumlah', mgInput('smQty', '', 'number', 'contoh: 40'));
+      mgField(b, 'Nominal pembelian Rp (opsional, untuk rekap)', mgInput('smNom', '', 'number', 'contoh: 50000'));
+      mgField(b, 'Tanggal', mgInput('smTgl', todayStr(), 'date'));
+      mgField(b, 'Catatan (opsional)', mgInput('smCat', '', 'text', 'contoh: beli galon / plastik'));
+    }, function () {
+      return call('api_saveStockMovement', S.token, {
+        outlet_id: $('smOut').value, jenis: $('smJns').value, stock_item_id: $('smItem').value,
+        qty: $('smQty').value, nominal: $('smNom').value, tanggal: $('smTgl').value, catatan: $('smCat').value
+      }).then(openStock);
+    });
+  }
+  function openStockRecap(month) {
+    var m = typeof month === 'string' ? month : todayStr().substring(0, 7);
+    call('api_stockInRecap', S.token, { month: m }).then(function (r) {
+      mgModal('Rekap stok masuk · ' + r.month, function (b) {
+        var mi = mgInput('srMon', r.month, 'month'); mi.onchange = function () { if (this.value) openStockRecap(this.value); };
+        mgField(b, 'Pilih bulan', mi);
+        b.appendChild(el('p', 'pcPrice', 'Total nominal pengadaan: ' + rp(r.total_nominal)));
+        if (!r.items.length) { b.appendChild(el('p', 'm', 'Belum ada catatan stok masuk bulan ini.')); return; }
+        b.appendChild(rtable(['Barang', 'Kategori', 'Qty', 'Nominal'], r.items.map(function (x) {
+          return [x.nama + ' (' + x.satuan + ')', x.kategori, x.qty, nf(x.nominal)];
+        }), 2));
+      }, null);
+    }).catch(function (e) { $('sMsg').textContent = msg(e); });
+  }
 
   /* ===================== DASHBOARD ===================== */
   var D = { d: null, outlet: null, closeFor: null };
@@ -1212,9 +1259,16 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     if (d.me) { g.appendChild(cardMyShift(d)); g.appendChild(cardToko(d)); }
     else { var tk = cardToko(d); tk.classList.add('span2'); g.appendChild(tk); }
     g.appendChild(cardStok(d)); g.appendChild(cardOrders(d, full));
-    if (full) { g.appendChild(cardShift(d)); g.appendChild(cardCatatan(d)); g.appendChild(cardChart(d)); }
+    if (full) { g.appendChild(cardShift(d)); g.appendChild(cardCatatan(d)); g.appendChild(cardProdukHariIni(d)); g.appendChild(cardChart(d)); }
     else { var ct = cardCatatan(d); ct.classList.add('span2'); g.appendChild(ct); }
     body.appendChild(g);
+  }
+  function cardProdukHariIni(d) {
+    var list = d.produk_hari_ini || [], tot = list.reduce(function (s, x) { return s + x.qty; }, 0);
+    var c = dcard('Produk terjual hari ini', tot + ' pcs', 'span2');
+    if (!list.length) { c.appendChild(el('p', 'm', 'Belum ada penjualan hari ini.')); return c; }
+    c.appendChild(rtable(['Produk', 'Terjual (pcs)', 'Omzet'], list.map(function (x) { return [x.nama, x.qty, nf(x.omzet)]; }), 1));
+    return c;
   }
   function cardMyShift(d) {
     var me = d.me, c = dcard('Shift saya', me.outlet_nama), sh = me.shift_label;
@@ -1374,6 +1428,27 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
       body.appendChild(ag);
     }
     if (d.canEdit) body.appendChild(el('p', 'm', 'Ketuk tanggal untuk mengubah jadwal.'));
+    if (S.user && S.user.role === 'owner') {
+      var pb = el('div', ''); pb.style.marginTop = '14px';
+      pb.appendChild(msgBtn('Rekap shift & gaji bulan ini', 's', function () { openPayroll(d.month); }));
+      body.appendChild(pb);
+    }
+  }
+  function openPayroll(month) {
+    call('api_payroll', S.token, { month: month }).then(function (r) {
+      mgModal('Rekap gaji karyawan · ' + r.month, function (b) {
+        var tr = mgInput('pyRate', r.tarif_shift, 'number', 'contoh: 35000');
+        mgField(b, 'Tarif per shift (Rp)', tr);
+        var saveRate = msgBtn('Simpan tarif', 's', function () {
+          call('api_savePayrollRate', S.token, { tarif_shift: tr.value }).then(function () { openPayroll(r.month); })
+            .catch(function (e) { $('mgOvErr').textContent = msg(e); });
+        });
+        saveRate.style.marginBottom = '12px'; b.appendChild(saveRate);
+        b.appendChild(rtable(['Nama', 'Hadir', 'Telat', 'Shift', 'Jam', 'Gaji'], r.rows.map(function (x) {
+          return [x.nama, x.hadir, x.telat, x.shift, x.jam, nf(x.gaji)];
+        }), 1));
+      }, null);
+    }).catch(function (e) { $('jMsg').textContent = msg(e); });
   }
   function openEdit(t) {
     var d = J.d, v = d.days[t] || { s1: '', s2: '', ket: '' };
@@ -1613,6 +1688,12 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
       else c3.appendChild(rtable(['No', 'Member', 'Frekuensi beli', 'Total belanja'], d.member.map(function (x) { return [x.no, x.nama, x.frekuensi + '×', nf(x.total)]; }), 2));
       b.appendChild(c3);
     }
+    if (d.top_spender) {
+      var c3b = dcard('Top spender (belanja terbesar)'); c3b.style.marginTop = '14px';
+      if (!d.top_spender.length) c3b.appendChild(el('p', 'm', 'Belum ada pembelian member.'));
+      else c3b.appendChild(rtable(['No', 'Member', 'Total belanja', 'Frekuensi'], d.top_spender.map(function (x) { return [x.no, x.nama, nf(x.total), x.frekuensi + '×']; }), 2));
+      b.appendChild(c3b);
+    }
     var c4 = cardStok({ stok: d.stok }); c4.style.marginTop = '14px'; b.appendChild(c4);
   }
   function cardLR(l) {
@@ -1659,7 +1740,9 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
   }
   function mgModal(title, buildFn, saveFn) {
     var b = $('mgOvBody'); b.textContent = ''; b.appendChild(el('h1', '', title));
-    buildFn(b); MG.save = saveFn; $('mgOvErr').textContent = ''; $('mgOv').classList.remove('hide');
+    buildFn(b); MG.save = saveFn; $('mgOvErr').textContent = '';
+    $('mgOvOk').classList.toggle('hide', !saveFn); $('mgOvCancel').textContent = saveFn ? 'Batal' : 'Tutup';
+    $('mgOv').classList.remove('hide');
     setTimeout(function () { $('mgOv').querySelector('.card').scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 20);
   }
   $('mgOvCancel').onclick = function () { $('mgOv').classList.add('hide'); };
@@ -1674,7 +1757,44 @@ textarea{width:100%;min-height:90px;border:1.5px solid var(--m);border-radius:12
     Array.prototype.forEach.call($('mgTabs').children, function (x) { x.classList.toggle('on', x.getAttribute('data-t') === MG.tab); });
     if (MG.tab === 'promo') drawMgPromo(d, b);
     else if (MG.tab === 'produk') drawMgProduk(d, b);
-    else drawMgUser(d, b);
+    else if (MG.tab === 'user') drawMgUser(d, b);
+    else if (MG.tab === 'kurir') drawMgKurir(b);
+    else drawMgRiwayat(b);
+  }
+  function drawMgKurir(b) {
+    var act = el('div', 'facts'); act.appendChild(msgBtn('+ Tambah kurir', '', function () { openKurirForm(null); })); b.appendChild(act);
+    call('api_couriers', S.token).then(function (list) {
+      if (!list.length) { b.appendChild(el('p', 'm', 'Belum ada kontak kurir.')); return; }
+      list.forEach(function (k) {
+        var c = el('div', 'ord'), hd = el('div', 'hd'), l = el('div');
+        l.appendChild(el('b', '', k.nama + ' · ' + k.no_hp));
+        if (k.catatan) l.appendChild(el('div', 'm', k.catatan));
+        hd.appendChild(l); hd.appendChild(el('span', 'tag ' + (k.aktif ? '' : 'l'), k.aktif ? 'Aktif' : 'Nonaktif')); c.appendChild(hd);
+        var ac = el('div', 'acts'); ac.appendChild(msgBtn('Ubah', 's', function () { openKurirForm(k); })); c.appendChild(ac);
+        b.appendChild(c);
+      });
+    }).catch(function (e) { $('mgMsg').textContent = msg(e); });
+  }
+  function openKurirForm(k) {
+    mgModal(k ? 'Ubah kurir' : 'Tambah kurir', function (b) {
+      mgField(b, 'Nama kurir', mgInput('mkNama', k ? k.nama : '', 'text'));
+      mgField(b, 'No. HP / WhatsApp', mgInput('mkHp', k ? k.no_hp : '', 'tel'));
+      mgField(b, 'Catatan (tarif / area / kendaraan)', mgInput('mkCat', k ? k.catatan : '', 'text'));
+      mgField(b, 'Status', mgSelect('mkAktif', [['1', 'Aktif'], ['0', 'Nonaktif']], !k || k.aktif ? '1' : '0'));
+    }, function () {
+      return call('api_saveCourier', S.token, {
+        courier_id: k ? k.courier_id : '', nama: $('mkNama').value, no_hp: $('mkHp').value,
+        catatan: $('mkCat').value, aktif: $('mkAktif').value === '1'
+      });
+    });
+  }
+  function drawMgRiwayat(b) {
+    call('api_priceHistory', S.token).then(function (list) {
+      if (!list.length) { b.appendChild(el('p', 'm', 'Belum ada catatan perubahan harga/produk.')); return; }
+      b.appendChild(rtable(['Waktu', 'Oleh', 'Aksi', 'Detail'], list.map(function (x) {
+        return [x.waktu, x.oleh, x.aksi, x.detail];
+      }), 4));
+    }).catch(function (e) { $('mgMsg').textContent = msg(e); });
   }
   function drawMgPromo(d, b) {
     var act = el('div', 'facts'); act.appendChild(msgBtn('+ Tambah promo', '', function () { openPromoForm(null); })); b.appendChild(act);
